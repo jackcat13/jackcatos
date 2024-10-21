@@ -12,7 +12,7 @@ pub extern "C" fn _start() -> ! {
     println!("Welcome to the JackCatOs :)");
     
     jackcatos::init();
-
+    
     #[cfg(test)]
     test_main();
 
