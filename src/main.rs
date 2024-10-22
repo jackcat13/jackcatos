@@ -5,7 +5,7 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-use jackcatos::println;
+use jackcatos::{hlt_loop, println};
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
@@ -16,14 +16,16 @@ pub extern "C" fn _start() -> ! {
     #[cfg(test)]
     test_main();
 
-    loop {}
+    hlt_loop();
 }
 
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    use jackcatos::hlt_loop;
+
     println!("{}", info);
-    loop {}
+    hlt_loop();
 }
 
 #[cfg(test)]
