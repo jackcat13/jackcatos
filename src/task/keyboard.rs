@@ -8,7 +8,7 @@ use crossbeam_queue::ArrayQueue;
 use futures_util::{Stream, StreamExt};
 use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 
-use crate::{print, println, remove_last};
+use crate::{commands::parse_command, print, println, read_line, remove_last};
 
 use futures_util::task::AtomicWaker;
 
@@ -88,6 +88,10 @@ fn process_character(character: char) {
     if character == '\u{8}' {
         remove_last!();
     } else {
+        let line = read_line!();
         print!("{}", character);
+        if (character == '\n') {
+            parse_command(line);
+        }
     }
 }

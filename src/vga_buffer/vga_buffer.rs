@@ -1,3 +1,4 @@
+use alloc::string::{String, ToString};
 use lazy_static::lazy_static;
 use spin::Mutex;
 use core::fmt;
@@ -57,6 +58,21 @@ pub struct Writer {
 }
 
 impl Writer {
+    pub fn read_line(&mut self) -> String {
+        let row = BUFFER_HEIGHT - 1;
+        let mut col = 0;
+        let mut line = String::new();
+        while col < BUFFER_WIDTH {
+            let screen_char = self.buffer.chars[row][col].read();
+            if screen_char.ascii_character == b'\n' {
+                break;
+            }
+            line = line + &(screen_char.ascii_character as char).to_string();
+            col += 1;
+        }
+        return line;
+    }
+    
     pub fn remove_last(&mut self) {
         if self.column_position > 0 {
             self.column_position -= 1;
@@ -157,6 +173,11 @@ macro_rules! remove_last {
     () => ($crate::vga_buffer::vga_buffer::_remove_last());
 }
 
+#[macro_export]
+macro_rules! read_line {
+    () => ($crate::vga_buffer::vga_buffer::_read_line());
+}
+
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
@@ -164,6 +185,16 @@ pub fn _print(args: fmt::Arguments) {
     interrupts::without_interrupts(|| {
         WRITER.lock().write_fmt(args).unwrap();
     });
+}
+
+#[doc(hidden)]
+pub fn _read_line() -> String {
+    use x86_64::instructions::interrupts;
+    let mut result: String = String::new();
+    interrupts::without_interrupts(|| {
+        result = WRITER.lock().read_line();
+    });
+    result
 }
 
 #[doc(hidden)]
