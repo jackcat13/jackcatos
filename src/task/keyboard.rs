@@ -8,7 +8,7 @@ use crossbeam_queue::ArrayQueue;
 use futures_util::{Stream, StreamExt};
 use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 
-use crate::{print, println};
+use crate::{print, println, remove_last};
 
 use futures_util::task::AtomicWaker;
 
@@ -76,10 +76,18 @@ pub async fn print_keypresses() {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
             if let Some(key) = keyboard.process_keyevent(key_event) {
                 match key {
-                    DecodedKey::Unicode(character) => print!("{}", character),
-                    DecodedKey::RawKey(key) => print!("{:?}", key),
+                    DecodedKey::Unicode(character) => process_character(character),
+                    DecodedKey::RawKey(key) => (),
                 }
             }
         }
+    }
+}
+
+fn process_character(character: char) {
+    if character == '\u{8}' {
+        remove_last!();
+    } else {
+        print!("{}", character);
     }
 }
