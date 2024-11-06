@@ -9,9 +9,7 @@ extern crate alloc;
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use jackcatos::{
-    allocator, hlt_loop,
-    memory::{self, BootInfoFrameAllocator},
-    println, task::{executor::Executor, keyboard, Task},
+    allocator, disk, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
 };
 use x86_64::VirtAddr;
 
@@ -28,25 +26,20 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Heap init failed");
     
+    let buffer = disk::disk_read_sector(0, 1);
+    
+    println!("Disk read successful : {:x?}", buffer);
+    
     #[cfg(test)]
     test_main();
     
     let mut executor = Executor::new();
-    executor.spawn(Task::new(example_task()));
     executor.spawn(Task::new(keyboard::print_keypresses()));
     executor.run();
 
     hlt_loop();
 }
 
-async fn async_number() -> u32 {
-    42
-}
-
-async fn example_task() {
-    let number = async_number().await;
-    println!("async number: {}", number);
-}
 
 #[cfg(not(test))]
 #[panic_handler]

@@ -1,8 +1,8 @@
-use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use core::task::{Context, Poll, Waker};
 
 use super::{Task, TaskId};
 use alloc::{
-    collections::{btree_map::BTreeMap, VecDeque},
+    collections::btree_map::BTreeMap,
     sync::Arc,
     task::Wake,
 };

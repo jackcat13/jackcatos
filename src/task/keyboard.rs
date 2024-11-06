@@ -77,7 +77,7 @@ pub async fn print_keypresses() {
             if let Some(key) = keyboard.process_keyevent(key_event) {
                 match key {
                     DecodedKey::Unicode(character) => process_character(character),
-                    DecodedKey::RawKey(key) => (),
+                    DecodedKey::RawKey(_key) => (),
                 }
             }
         }
@@ -90,7 +90,7 @@ fn process_character(character: char) {
     } else {
         let line = read_line!();
         print!("{}", character);
-        if (character == '\n') {
+        if character == '\n' {
             parse_command(line);
         }
     }
