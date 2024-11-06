@@ -6,10 +6,11 @@
 
 extern crate alloc;
 
+use alloc::string::ToString;
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use jackcatos::{
-    allocator, disk, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
+    allocator, disk, fs::path_parser::init_path, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
 };
 use x86_64::VirtAddr;
 
@@ -26,9 +27,9 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Heap init failed");
     
-    let buffer = disk::disk_read_sector(0, 1);
-    
-    println!("Disk read successful : {:x?}", buffer);
+    let path = "1:/dzaopdkzaopddzaopdkzaopddzaopdkzaopddzaopdkzaopd/koapdz".to_string();
+    let p = init_path(path);
+    println!("{:?}", p);
     
     #[cfg(test)]
     test_main();

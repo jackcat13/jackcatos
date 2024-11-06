@@ -19,6 +19,7 @@ pub mod allocator;
 pub mod task;
 pub mod commands;
 pub mod disk;
+pub mod fs;
 
 pub fn init() {
     gdt::init();
