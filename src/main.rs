@@ -10,7 +10,7 @@ use alloc::string::ToString;
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use jackcatos::{
-    allocator, disk, fs::path_parser::init_path, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
+    allocator, disk::{self, disk::{disk_read_block, get_disk}}, fs::path_parser::init_path, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
 };
 use x86_64::VirtAddr;
 
@@ -30,6 +30,12 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let path = "1:/dzaopdkzaopddzaopdkzaopddzaopdkzaopddzaopdkzaopd/koapdz".to_string();
     let p = init_path(path);
     println!("{:?}", p);
+    
+    let disk = disk::disk::get_disk(0).unwrap();
+    // println!("Disk read : {:x?}", disk_read_block(disk.clone(), 0, 1));
+    
+    let mut streamer = disk::streamer::DiskStreamer::new(disk);
+    println!("Disk stream read : {:x?}", streamer.read(253).unwrap());
     
     #[cfg(test)]
     test_main();
