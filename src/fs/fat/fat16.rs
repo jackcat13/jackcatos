@@ -1,5 +1,5 @@
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, string::String};
 
 use crate::{disk::{disk::Disk, streamer::DiskStreamer}, fs::{file::{FileMode, FileSystem}, path_parser::PathPart}, println};
 
@@ -61,8 +61,8 @@ pub struct FatH {
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct FatDirectoryItem {
-    pub filename: [char; 8],
-    pub extension: [char; 3],
+    pub filename: [u8; 8],
+    pub extension: [u8; 3],
     pub attributes: u8,
     pub reserved: u8,
     pub creation_time_tenths_of_a_sec: u8,
@@ -137,7 +137,6 @@ fn fat16_resolve(disk: Disk) -> Result<Box<FatPrivate>, ResolveError> {
     let header: FatH = to_fat_h(fat_h);
     // print_header_details(&header);
     if header.extended_header.signature != 0x29 { return Err(ResolveError::InvalidSignature); }
-    println!("Signature: {:x?}", header.extended_header.signature);
     let mut fat_private = Box::new(FatPrivate {
         cluster_read_stream: DiskStreamer::new(disk.clone()),
         fat_read_stream: DiskStreamer::new(disk.clone()),
@@ -207,14 +206,15 @@ fn fat16_get_root_directory(disk: Disk, primary_header: &FatHeader, mut fat_priv
     let root_dir_size = primary_header.root_dir_entries as u32 * size_of::<FatDirectoryItem>() as u32;
     let mut total_sectors = root_dir_size / disk.sector_size as u32;
     if (root_dir_size % disk.sector_size as u32) != 0 { total_sectors += 1; }
-    let total_items = fat16_get_total_items_for_directory(disk.clone(), fat_private.clone(), root_dir_sector_position as u32);
+    let total_items = fat16_get_total_items_for_directory(disk.clone(), fat_private.directory_stream.clone(), root_dir_sector_position as u32);
     if total_items.is_none() { return None; }
     // println!("root dir sector position: {}", root_dir_sector_position);
     // println!("root dir size: {}", root_dir_size);
     // println!("Total sectors: {}", total_sectors);
     // println!("Total items: {}", total_items.unwrap());
-    fat_private.directory_stream.seek(fat16_sector_to_absolute(disk.clone(), root_dir_sector_position) as u32);
-    let dir = fat_private.directory_stream.read(root_dir_size as u16);
+    let position = fat16_sector_to_absolute(disk.clone(), root_dir_sector_position) as u32;
+    fat_private.directory_stream.seek(position);
+    let dir = fat_private.directory_stream.read((root_dir_size -1) as u16);
     if dir.is_none() { return None; }
     let dir = dir.unwrap();
     let dir = unsafe { dir.align_to::<u8>().1 };
@@ -232,24 +232,31 @@ fn fat16_sector_to_absolute(disk: Disk, sector: u32) -> u32 {
     sector * disk.sector_size as u32
 }
 
-fn fat16_get_total_items_for_directory(disk: Disk, fat_private: Box<FatPrivate>, directory_start_sector: u32) -> Option<u32> {
+fn fat16_get_total_items_for_directory(disk: Disk, mut stream: Box<DiskStreamer>, directory_start_sector: u32) -> Option<u32> {
     let mut i = 0;
     let directory_start_position = directory_start_sector * disk.sector_size as u32;
-    let mut stream = fat_private.directory_stream;
+    // println!("Directory start position: {}", directory_start_position);
     stream.seek(directory_start_position);
-    let item = stream.read(size_of::<FatDirectoryItem>() as u16);
-    if item.is_none() { return None; }
-    let item = item.unwrap();
-    let item = unsafe { item.align_to::<u8>().1 };
-    let item = to_fat_directory_item(item);
-    // print_item_details(&item);
-    for c in item.filename {
-        let c = c as u8;
-        if c == 0x00 { break; } // We have finished
-        if c == 0xE5 { continue; } // Is the item unused
+    // println!("stream pos : {}", stream.pos);
+    loop {
+        let item = stream.read(size_of::<FatDirectoryItem>() as u16);
+        if item.is_none() { continue; }
+        let item = item.unwrap();
+        let item = unsafe { item.align_to::<u8>().1 };
+        let item = to_fat_directory_item(item);
+        let filename = item.filename;
+        let filename = filename.iter().map(|x| *x as char).collect::<String>();
+        let extension = item.extension;
+        let extension = extension.iter().map(|x| *x as char).collect::<String>();
+        // println!("Filename: {:x?}", filename);
+        // println!("Extension: {:x?}", extension);
+        // println!("stream pos : {}", stream.pos);
+        
+        if item.filename[0] as u8 == 0x00 { break; }
+        if item.filename[0] as u8 == 0xE5 { continue; }
         i += 1;
     }
-    println!("Number of items for directory: {}", i);
+    println!("Total items: {}", i);
     Some(i)
 }
 

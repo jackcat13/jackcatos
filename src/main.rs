@@ -33,7 +33,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let disk2 = disk2.clone();
     // let disk_stream = DiskStreamer::new(disk2.clone());
     
-    println!("Disk content : {:?}", disk2);
+    // println!("Disk content : {:x?}", disk2);
     let fat_private = *disk2.fat_private.unwrap();
     let header = fat_private.header;
     let extended_header = header.extended_header;

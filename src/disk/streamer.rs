@@ -6,7 +6,7 @@ use super::disk::{disk_read_block, Disk};
 
 #[derive(Debug, Clone)]
 pub struct DiskStreamer {
-    pos: u32,
+    pub pos: u32,
     disk: Disk,
 }
 
@@ -26,7 +26,8 @@ impl DiskStreamer {
         match data {
             None => None,
             Some(data) => {
-                let mut res = data[0..total_to_read as usize].to_vec();
+                let rel_pos = self.pos % SECTOR_SIZE as u32;
+                let mut res = data[rel_pos as usize..(rel_pos + total_to_read as u32) as usize].to_vec();
                 self.pos += total_to_read as u32;
                 if total > SECTOR_SIZE {
                     let rest = self.read(total - SECTOR_SIZE);
