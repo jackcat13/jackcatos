@@ -1,15 +1,17 @@
+
 use alloc::{boxed::Box, vec};
 use crate::disk::disk::SECTOR_SIZE;
 
 use super::disk::{disk_read_block, Disk};
 
+#[derive(Debug, Clone)]
 pub struct DiskStreamer {
     pos: u32,
-    disk: Box<Disk>,
+    disk: Disk,
 }
 
 impl DiskStreamer {
-    pub fn new(disk: Box<Disk>) -> Box<DiskStreamer> {
+    pub fn new(disk: Disk) -> Box<DiskStreamer> {
         Box::new(DiskStreamer {
             pos: 0,
             disk,
@@ -35,5 +37,9 @@ impl DiskStreamer {
                 Some(res)
             }
         }
+    }
+    
+    pub fn seek(&mut self, pos: u32) {
+        self.pos = pos;
     }
 }

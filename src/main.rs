@@ -6,11 +6,10 @@
 
 extern crate alloc;
 
-use alloc::string::ToString;
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use jackcatos::{
-    allocator, disk::{self, disk::{disk_read_block, get_disk}}, fs::path_parser::init_path, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
+    allocator, disk::{self}, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
 };
 use x86_64::VirtAddr;
 
@@ -27,15 +26,19 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Heap init failed");
     
-    let path = "1:/dzaopdkzaopddzaopdkzaopddzaopdkzaopddzaopdkzaopd/koapdz".to_string();
-    let p = init_path(path);
-    println!("{:?}", p);
+    // let disk = disk::disk::get_disk(0).unwrap();
+    let disk2 = disk::disk::get_disk(1).unwrap();
+    let disk2 = disk2.clone();
+    let disk2 = disk2.lock();
+    let disk2 = disk2.clone();
+    // let disk_stream = DiskStreamer::new(disk2.clone());
     
-    let disk = disk::disk::get_disk(0).unwrap();
-    // println!("Disk read : {:x?}", disk_read_block(disk.clone(), 0, 1));
-    
-    let mut streamer = disk::streamer::DiskStreamer::new(disk);
-    println!("Disk stream read : {:x?}", streamer.read(253).unwrap());
+    println!("Disk content : {:?}", disk2);
+    let fat_private = *disk2.fat_private.unwrap();
+    let header = fat_private.header;
+    let extended_header = header.extended_header;
+    let volume_id_string = extended_header.volume_id_string;
+    println!("volume label : {:x?}", volume_id_string);
     
     #[cfg(test)]
     test_main();
