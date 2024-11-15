@@ -2,9 +2,9 @@ use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::disk::disk::Disk;
+use crate::{disk::disk::{get_disk, Disk}, println};
 
-use super::{fat::fat16::{fat16_init, FatPrivate, ResolveError}, path_parser::PathPart};
+use super::{fat::fat16::{fat16_init, FatFileDescriptor, FatPrivate, ResolveError}, path_parser::{self, PathPart}};
 
 pub const MAX_OS_FILESYSTEMS: usize = 12;
 pub const MAX_OS_FILEDESCRIPTORS: usize = 512;
@@ -26,7 +26,7 @@ pub struct File {
     
 }
 
-type FsOpen = fn(Box<Disk>, &PathPart, &FileMode) -> Option<u8>;
+type FsOpen = fn(&Disk, &PathPart, &FileMode) -> Result<FatFileDescriptor, ()>;
 type FsResolve = fn(Disk) -> Result<Box<FatPrivate>, ResolveError>;
 
 #[derive(Debug, Clone, Copy)]
@@ -43,21 +43,25 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct FileDescriptor {
-    pub index: u32,
-    pub filesystem: Box<FileSystem>,
-    pub disk: Box<Disk>,
+    pub filesystem: FileSystem,
+    pub disk: Disk,
+}
+
+impl FileDescriptor {
+    pub fn new(filesystem: FileSystem, disk: Disk) -> Result<FileDescriptor, ()> {
+        let mut file_descriptors = FILE_DESCRIPTORS.lock();
+        let new = FileDescriptor { filesystem, disk, };
+        file_descriptors.push(new.clone());
+        Ok((new))
+    }
 }
 
 lazy_static! {
-    pub static ref FILE_DESCRIPTORS: Mutex<Vec<Option<FileDescriptor>>> = Mutex::new(Vec::new());
+    pub static ref FILE_DESCRIPTORS: Mutex<Vec<FileDescriptor>> = Mutex::new(Vec::new());
 }
 
 pub fn fs_init() {
     fs_static_load(); 
-}
-
-pub fn fopen(filename: String, mode: String) {
-    
 }
 
 pub fn fs_insert_fs(fs: FileSystem) {
@@ -87,4 +91,45 @@ pub fn fs_resolve(disk: Arc<Mutex<Disk>>) -> Option<u8> {
         }
     }
     None
+}
+
+#[derive(Debug)]
+pub enum FOpenError {
+    ParsePathError,
+    NoDiskError,
+    NoFilesystemError,
+    InvalidFileModeError,
+    OpenFileError,
+}
+
+pub fn fopen(filename: String, mode: String) -> Result<FileDescriptor, FOpenError> {
+    let root_path = path_parser::init_path(filename);
+    match root_path {
+        Ok(root_path) => {
+            let disk = get_disk(root_path.drive_number);
+            if disk.is_none() { return Err(FOpenError::NoDiskError) }
+            let disk = disk.unwrap();
+            let disk = disk.lock();
+            if disk.filesystem.is_none() { return Err(FOpenError::NoFilesystemError) }
+            let filesystem = disk.filesystem.unwrap();
+            let mode = get_file_mode_from_string(mode);
+            if matches!(mode, FileMode::INVALID) { return Err(FOpenError::InvalidFileModeError) }
+            let first = root_path.first;
+            let descriptor_private_data = (filesystem.open)(&disk, &first, &mode);
+            if descriptor_private_data.is_err() { return Err(FOpenError::OpenFileError) }
+            let file_descriptor = FileDescriptor::new(filesystem, disk.clone());
+            if file_descriptor.is_err() { return Err(FOpenError::OpenFileError) }
+            Ok(file_descriptor.unwrap())
+        },
+        Err(_) => Err(FOpenError::ParsePathError),
+    }
+}
+
+fn get_file_mode_from_string(mode: String) -> FileMode {
+    match mode.as_str() {
+        "r" => FileMode::READ,
+        "w" => FileMode::WRITE,
+        "a" => FileMode::APPEND,
+        _ => FileMode::INVALID,
+    }
 }

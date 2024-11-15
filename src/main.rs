@@ -6,10 +6,11 @@
 
 extern crate alloc;
 
+use alloc::string::ToString;
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use jackcatos::{
-    allocator, disk::{self}, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
+    allocator, disk::{self}, fs::file::fopen, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
 };
 use x86_64::VirtAddr;
 
@@ -25,7 +26,6 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Heap init failed");
-    
     // let disk = disk::disk::get_disk(0).unwrap();
     let disk2 = disk::disk::get_disk(1).unwrap();
     let disk2 = disk2.clone();
@@ -38,7 +38,8 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let header = fat_private.header;
     let extended_header = header.extended_header;
     let volume_id_string = extended_header.volume_id_string;
-    println!("volume label : {:x?}", volume_id_string);
+    // println!("volume label : {:x?}", volume_id_string);
+    println!("Fopen sub1/test3.txt : {:x?}", fopen("1:/sub1/test3.txt".to_string(), "r".to_string()));
     
     #[cfg(test)]
     test_main();

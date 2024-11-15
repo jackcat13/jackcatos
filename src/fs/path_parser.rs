@@ -1,8 +1,6 @@
 use alloc::{boxed::Box, string::{String, ToString}};
 
-use crate::println;
-
-const PATH_MAX_SIZE: usize = 108;
+pub const PATH_MAX_SIZE: usize = 108;
 
 #[derive(Debug, Clone)]
 pub struct PathRoot{

@@ -29,14 +29,14 @@ fn disk_search_and_init(index: u8) -> Arc<Mutex<Disk>> {
         filesystem: None,
         fat_private: None,
     }));
-    println!("Start resolving disk");
+    println!("Start resolving disk {}", index);
     fs_resolve(disk.clone()).unwrap();
     println!("End resolving disk");
     disk
 }
 
 pub fn get_disk(index: u8) -> Option<Arc<Mutex<Disk>>> {
-    if index > 2 {
+    if index >= 2 {
         return None; // Only one disk are supported so far
     } 
     Some(disk_search_and_init(index))
@@ -56,7 +56,7 @@ pub fn disk_read_block(disk: Disk, lba: u32, total: u8) -> Option<vec::Vec<u16>>
 }
 
 fn disk_read_sector(lba: u32, total: u8, slave_bit: u8) -> vec::Vec<u16>{ 
-    unsafe { PortWrite::write_to_port(0x1F6, (slave_bit <<  4) | (lba >> 24) as u8 | 0xE0) };
+    unsafe { PortWrite::write_to_port(0x1F6, (lba >> 24) as u8 | (slave_bit <<  4) | 0xE0) };
     unsafe { PortWrite::write_to_port(0x1F2, total) };
     unsafe { PortWrite::write_to_port(0x1F3, (lba & 0xff) as u8) };
     unsafe { PortWrite::write_to_port(0x1F4, (lba >> 8) as u8) };
