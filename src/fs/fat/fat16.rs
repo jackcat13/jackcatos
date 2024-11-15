@@ -304,7 +304,7 @@ fn to_fat_directory_item(dir: &[u8]) -> FatDirectoryItem {
     fat_directory_item
 }
 
-fn fat16_open(disk: &Disk, path: &PathPart, mode: &FileMode) -> Result<FatFileDescriptor, ()> {
+fn fat16_open(disk: &Disk, path: &PathPart, mode: &FileMode) -> Result<(), ()> {
     if !matches!(mode, FileMode::READ) { return Err(()); }
     // println!("get root directory entry");
     let item = fat16_get_directory_entry(disk, path);
@@ -318,7 +318,7 @@ fn fat16_open(disk: &Disk, path: &PathPart, mode: &FileMode) -> Result<FatFileDe
         item,
     };
     // print!("return fat file descriptor {:x?}", fat_file_descriptor);
-    Ok(fat_file_descriptor)
+    Ok(())
 }
 
 fn fat16_get_directory_entry(disk: &Disk, path: &PathPart) -> Result<Option<FatItem>, ()> {

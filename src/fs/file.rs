@@ -26,7 +26,7 @@ pub struct File {
     
 }
 
-type FsOpen = fn(&Disk, &PathPart, &FileMode) -> Result<FatFileDescriptor, ()>;
+type FsOpen = fn(&Disk, &PathPart, &FileMode) -> Result<(), ()>;
 type FsResolve = fn(Disk) -> Result<Box<FatPrivate>, ResolveError>;
 
 #[derive(Debug, Clone, Copy)]
