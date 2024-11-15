@@ -18,7 +18,7 @@ impl DiskStreamer {
         })
     }
     
-    pub fn read(&mut self, total: u16) -> Option<vec::Vec<u16>> {
+    pub fn read(&mut self, total: u32) -> Option<vec::Vec<u16>> {
         let sector = self.pos / SECTOR_SIZE as u32;
         
         let data = disk_read_block(self.disk.clone(), sector, 1);

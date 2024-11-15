@@ -5,7 +5,7 @@ use x86_64::structures::port::{PortRead, PortWrite};
 
 use crate::{fs::{fat::fat16::FatPrivate, file::{fs_resolve, FileSystem}}, println};
 
-pub const SECTOR_SIZE: u16 = 512;
+pub const SECTOR_SIZE: u32 = 512;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DiskType {
@@ -15,7 +15,7 @@ pub enum DiskType {
 #[derive(Debug, Clone)]
 pub struct Disk {
     pub type_: DiskType,
-    pub sector_size: u16,
+    pub sector_size: u32,
     pub disk_number: u8,
     pub filesystem: Option<FileSystem>,
     pub fat_private: Option<Box<FatPrivate>>,

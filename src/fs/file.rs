@@ -4,7 +4,7 @@ use spin::Mutex;
 
 use crate::{disk::disk::{get_disk, Disk}, println};
 
-use super::{fat::fat16::{fat16_init, FatFileDescriptor, FatPrivate, ResolveError}, path_parser::{self, PathPart}};
+use super::{fat::fat16::{fat16_init, FatPrivate, ResolveError}, path_parser::{self, PathPart}};
 
 pub const MAX_OS_FILESYSTEMS: usize = 12;
 pub const MAX_OS_FILEDESCRIPTORS: usize = 512;
@@ -26,13 +26,15 @@ pub struct File {
     
 }
 
-type FsOpen = fn(&Disk, &PathPart, &FileMode) -> Result<(), ()>;
+type FsOpen = fn(&Disk, &PathPart, &FileMode) -> Result<Vec<u8>, ()>;
 type FsResolve = fn(Disk) -> Result<Box<FatPrivate>, ResolveError>;
+type FsRead = fn(&Disk, &Vec<u8>, u16, u16) -> Result<Vec<u8>, ()>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FileSystem {
     pub resolve: FsResolve,
     pub open: FsOpen,
+    pub read: FsRead,
     
     pub name: [char; 20],
 }
@@ -44,13 +46,15 @@ lazy_static! {
 #[derive(Debug, Clone)]
 pub struct FileDescriptor {
     pub filesystem: FileSystem,
+    pub private: Vec<u8>,
     pub disk: Disk,
+    pub index: u16,
 }
 
 impl FileDescriptor {
-    pub fn new(filesystem: FileSystem, disk: Disk) -> Result<FileDescriptor, ()> {
+    pub fn new(filesystem: FileSystem, disk: Disk, private: Vec<u8>) -> Result<FileDescriptor, ()> {
         let mut file_descriptors = FILE_DESCRIPTORS.lock();
-        let new = FileDescriptor { filesystem, disk, };
+        let new = FileDescriptor { filesystem, private, disk, index: file_descriptors.len() as u16 };
         file_descriptors.push(new.clone());
         Ok((new))
     }
@@ -117,12 +121,24 @@ pub fn fopen(filename: String, mode: String) -> Result<FileDescriptor, FOpenErro
             let first = root_path.first;
             let descriptor_private_data = (filesystem.open)(&disk, &first, &mode);
             if descriptor_private_data.is_err() { return Err(FOpenError::OpenFileError) }
-            let file_descriptor = FileDescriptor::new(filesystem, disk.clone());
+            let descriptor_private_data = descriptor_private_data.unwrap();
+            let file_descriptor = FileDescriptor::new(filesystem, disk.clone(), descriptor_private_data);
             if file_descriptor.is_err() { return Err(FOpenError::OpenFileError) }
             Ok(file_descriptor.unwrap())
         },
         Err(_) => Err(FOpenError::ParsePathError),
     }
+}
+
+pub fn fread(private: Vec<u8>, size: u16, nmemb: u16, fd: u16) -> Result<Vec<u8>, ()> {
+    if size == 0 || nmemb == 0 { return Err(()) }
+    let file_descriptors = FILE_DESCRIPTORS.lock();
+    let desc = file_descriptors.get(fd as usize);
+    if desc.clone().is_none() { return Err(()) }
+    let desc = desc.unwrap();
+    let res = (desc.filesystem.read)(&desc.disk, &private, size, nmemb);
+    if res.is_err() { return Err(()) }
+    Ok(res.unwrap())
 }
 
 fn get_file_mode_from_string(mode: String) -> FileMode {

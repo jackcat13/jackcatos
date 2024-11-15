@@ -1,7 +1,9 @@
 
+use core::{any::Any, ffi::c_void, fmt::Pointer};
+
 use alloc::{boxed::Box, string::String, vec::{self, Vec}}; 
 
-use crate::{disk::{disk::Disk, streamer::DiskStreamer}, fs::{file::{FileMode, FileSystem}, path_parser::{PathPart, PATH_MAX_SIZE}}, print, println};
+use crate::{disk::{disk::Disk, streamer::DiskStreamer}, fs::{file::{FileDescriptor, FileMode, FileSystem}, path_parser::{PathPart, PATH_MAX_SIZE}}, print, println};
 
 pub const FAT_16_SIGNATURE: u8 = 0x29;
 pub const FAT_16_FAT_ENTRY_SIZE: u8 = 0x02;
@@ -98,7 +100,7 @@ pub struct FatItem {
 #[repr(C)]
 pub struct FatFileDescriptor {
     item: FatItem,
-    position: u32,
+    position: u16,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +120,7 @@ pub fn fat16_init() -> FileSystem {
     FileSystem {
         resolve: fat16_resolve,
         open: fat16_open,
+        read: fat16_read,
         
         name: ['f', 'a', 't', '1', '6', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
     }
@@ -133,7 +136,7 @@ pub enum ResolveError {
 
 fn fat16_resolve(disk: Disk) -> Result<Box<FatPrivate>, ResolveError> {
     let mut disk_stream = DiskStreamer::new(disk.clone());
-    let fat_h = disk_stream.read(size_of::<FatH>() as u16);
+    let fat_h = disk_stream.read(size_of::<FatH>() as u32);
     if fat_h == None { return Err(ResolveError::FailedToReadHeader); }
     let fat_h = fat_h.unwrap();
     let fat_h = unsafe { fat_h.align_to::<u8>().1 };
@@ -156,46 +159,6 @@ fn fat16_resolve(disk: Disk) -> Result<Box<FatPrivate>, ResolveError> {
     Ok(fat_private)
 }
 
-fn print_header_details(header: &FatH) {
-    let bytes_per_sector = header.primary_header.bytes_per_sector;
-    let sectors_per_cluster = header.primary_header.sectors_per_cluster;
-    let reserved_sectors = header.primary_header.reserved_sectors;
-    let fat_copies = header.primary_header.fat_copies;
-    let root_dir_entries = header.primary_header.root_dir_entries;
-    let number_of_sectors = header.primary_header.number_of_sectors;
-    let media_type = header.primary_header.media_type;
-    let sectors_per_fat = header.primary_header.sectors_per_fat;
-    let sectors_per_track = header.primary_header.sectors_per_track;
-    let number_of_heads = header.primary_header.number_of_heads;
-    let hidden_sectors = header.primary_header.hidden_sectors;
-    let sectors_big = header.primary_header.sectors_big;
-    println!("Bytes per sector: {}", bytes_per_sector);
-    println!("Sectors per cluster: {}", sectors_per_cluster);
-    println!("Reserved sectors: {}", reserved_sectors);
-    println!("FAT copies: {}", fat_copies);
-    println!("Root directory entries: {}", root_dir_entries);
-    println!("Number of sectors: {}", number_of_sectors);
-    println!("Media type: {}", media_type);
-    println!("Sectors per FAT: {}", sectors_per_fat);
-    println!("Sectors per track: {}", sectors_per_track);
-    println!("Number of heads: {}", number_of_heads);
-    println!("Hidden sectors: {}", hidden_sectors);
-    println!("Sectors big: {}", sectors_big);
-    
-    let drive_number = header.extended_header.drive_number;
-    let windows_nt_flags = header.extended_header.win_nt_bit;
-    let signature = header.extended_header.signature;
-    let volume_id = header.extended_header.volume_id;
-    let volume_id_string = header.extended_header.volume_id_string;
-    let system_id_string = header.extended_header.system_id_string;
-    println!("Drive number: {}", drive_number);
-    println!("Windows NT flags: {}", windows_nt_flags);
-    println!("Signature: {}", signature);
-    println!("Volume ID: {}", volume_id);
-    println!("System ID string: {:?}", system_id_string);
-    
-}
-
 fn to_fat_h(fat_h: &[u8]) -> FatH {
     let mut ptr = fat_h.as_ptr();
     let primary_header = unsafe { *(ptr as *const FatHeader) };
@@ -206,24 +169,27 @@ fn to_fat_h(fat_h: &[u8]) -> FatH {
 
 fn fat16_get_root_directory(disk: Disk, primary_header: &FatHeader, mut fat_private: Box<FatPrivate>) -> Option<FatDirectory> {
     let root_dir_sector_position = (primary_header.fat_copies as u32 * primary_header.sectors_per_fat as u32) + primary_header.reserved_sectors as u32;
-    let root_dir_size = primary_header.root_dir_entries as u32 * size_of::<FatDirectoryItem>() as u32;
-    let mut total_sectors = root_dir_size / disk.sector_size as u32;
-    if (root_dir_size % disk.sector_size as u32) != 0 { total_sectors += 1; }
+    let root_dir_entries = fat_private.header.primary_header.root_dir_entries;
+    let root_dir_size = root_dir_entries as u32 * size_of::<FatDirectoryItem>() as u32;
+    let mut total_sectors = root_dir_size as u32 / disk.sector_size;
+    if (root_dir_size as u32 % disk.sector_size) != 0 { total_sectors += 1; }
     let total_items = fat16_get_total_items_for_directory(disk.clone(), fat_private.directory_stream.clone(), root_dir_sector_position as u32);
     if total_items.is_none() { return None; }
+    let total_items = total_items.unwrap();
     let position = fat16_sector_to_absolute(disk.clone(), root_dir_sector_position) as u32;
+    println!("position: {} / root_dir_size {}", position, root_dir_size);
     fat_private.directory_stream.seek(position);
-    let dir = fat_private.directory_stream.read((root_dir_size -1) as u16);
+    let dir = fat_private.directory_stream.read((root_dir_size as u32));
     if dir.is_none() { return None; }
     let dir = dir.unwrap();
     let dir = unsafe { dir.align_to::<u8>().1 };
     let fat_directory = Some(FatDirectory {
-        items: to_fat_directory_items(dir, total_items.unwrap()),
-        total: total_items.unwrap() as u32,
+        items: to_fat_directory_items(dir, total_items as u32),
+        total: total_items as u32,
         sector_pos: root_dir_sector_position,
-        end_sector_pos: (root_dir_sector_position + (root_dir_size / disk.sector_size as u32)),
+        end_sector_pos: (root_dir_sector_position + (root_dir_size as u32 / disk.sector_size)),
     });
-    // println!("Root directory: {:x?}", fat_directory);
+    println!("fat directory : {:?}", fat_directory.clone().unwrap().items.iter().map(|x| x.filename.iter().map(|y| *y as char).collect::<String>()).collect::<Vec<String>>());
     fat_directory
 }
 
@@ -234,64 +200,31 @@ fn fat16_sector_to_absolute(disk: Disk, sector: u32) -> u32 {
 fn fat16_get_total_items_for_directory(disk: Disk, mut stream: Box<DiskStreamer>, directory_start_sector: u32) -> Option<u16> {
     let mut i = 0;
     let directory_start_position = directory_start_sector * disk.sector_size as u32;
-    // println!("Directory start position: {}", directory_start_position);
     stream.seek(directory_start_position);
-    // println!("stream pos : {}", stream.pos);
     loop {
-        let item = stream.read(size_of::<FatDirectoryItem>() as u16);
+        let item = stream.read(size_of::<FatDirectoryItem>() as u32);
         if item.is_none() { continue; }
         let item = item.unwrap();
         let item = unsafe { item.align_to::<u8>().1 };
         let item = to_fat_directory_item(item);
         let filename = item.filename;
-        let filename = filename.iter().map(|x| *x as char).collect::<String>();
         let extension = item.extension;
-        let extension = extension.iter().map(|x| *x as char).collect::<String>();
-        println!("Filename: {:x?}", filename);
-        println!("Extension: {:x?}", extension);
-        // println!("stream pos : {}", stream.pos);
         
         if item.filename[0] as u8 == 0x00 { break; }
         if item.filename[0] as u8 == 0xE5 { continue; }
         i += 1;
     }
-    println!("Total items: {}", i);
     Some(i)
 }
 
-fn print_item_details(item: &FatDirectoryItem) {
-    let filename = item.filename;
-    let extension = item.extension;
-    let attributes = item.attributes;
-    let reserved = item.reserved;
-    let creation_time_tenths_of_a_sec = item.creation_time_tenths_of_a_sec;
-    let creation_time = item.creation_time;
-    let creation_date = item.creation_date;
-    let last_access = item.last_access;
-    let high_16_bits_first_cluster = item.high_16_bits_first_cluster;
-    let last_modification_time = item.last_modification_time;
-    let last_modification_date = item.last_modification_date;
-    let low_16_bits_first_cluster = item.low_16_bits_first_cluster;
-    let file_size = item.file_size;
-    println!("Filename: {:?}", filename);
-    println!("Extension: {:?}", extension);
-    println!("Attributes: {:?}", attributes);
-    println!("Reserved: {:?}", reserved);
-    println!("Creation time tenths of a second: {:?}", creation_time_tenths_of_a_sec);
-    println!("Creation time: {:?}", creation_time);
-    println!("Creation date: {:?}", creation_date);
-    println!("Last access: {:?}", last_access);
-    println!("High 16 bits first cluster: {:?}", high_16_bits_first_cluster);
-    println!("Last modification time: {:?}", last_modification_time);
-    println!("Last modification date: {:?}", last_modification_date);
-    println!("Low 16 bits first cluster: {:?}", low_16_bits_first_cluster);
-    println!("File size: {:?}", file_size);
-}
-
-fn to_fat_directory_items(dir: &[u8], total: u16) -> Vec<FatDirectoryItem> {
+fn to_fat_directory_items(dir: &[u8], total: u32) -> Vec<FatDirectoryItem> {
     let mut res = alloc::vec![];
     for i in 0..total {
-        let item = dir[i as usize * size_of::<FatDirectoryItem>()..(i as usize + 1) * size_of::<FatDirectoryItem>()].to_vec();
+        let index = i as usize * size_of::<FatDirectoryItem>();
+        let index_end = index + size_of::<FatDirectoryItem>() - 1;
+        println!("index: {}", index);
+        println!("index_end: {}", index_end);
+        let item = dir[index..index_end].to_vec();
         let item = to_fat_directory_item(&item);
         res.push(item);
     }
@@ -304,21 +237,25 @@ fn to_fat_directory_item(dir: &[u8]) -> FatDirectoryItem {
     fat_directory_item
 }
 
-fn fat16_open(disk: &Disk, path: &PathPart, mode: &FileMode) -> Result<(), ()> {
+fn fat16_open(disk: &Disk, path: &PathPart, mode: &FileMode) -> Result<Vec<u8>, ()> {
     if !matches!(mode, FileMode::READ) { return Err(()); }
-    // println!("get root directory entry");
     let item = fat16_get_directory_entry(disk, path);
     if item.is_err() { return Err(()); }
     let item = item.unwrap();
     if item.is_none() { return Err(()); }
     let item = item.unwrap();
-    // println!("root directory entry type: {:x?}", item.item_type);
     let fat_file_descriptor = FatFileDescriptor {
         position: 0,
         item,
     };
-    // print!("return fat file descriptor {:x?}", fat_file_descriptor);
-    Ok(())
+    Ok(unsafe { any_as_u8_slice(&fat_file_descriptor) })
+}
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> Vec<u8> {
+    ::core::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::core::mem::size_of::<T>(),
+    ).to_vec()
 }
 
 fn fat16_get_directory_entry(disk: &Disk, path: &PathPart) -> Result<Option<FatItem>, ()> {
@@ -351,9 +288,7 @@ fn fat16_find_item_in_directory(disk: &Disk, directory: &FatDirectory, name: Str
     for i in 0..directory.total {
         let item = directory.items[i as usize];
         let tmp_filename = fat16_get_full_relative_filename(&item);
-        println!("search name compared with : {} / {}", name, tmp_filename);
         if tmp_filename == name {
-            println!("found item in directory : {:x?} in {:x?}", tmp_filename, directory.sector_pos);
             f_item = fat16_new_fat_item_for_directory_item(disk, &item);
         }
     }
@@ -417,10 +352,10 @@ fn fat16_load_fat_directory(disk: &Disk, item: &FatDirectoryItem) -> Result<FatD
     if total_items.is_none() { return Err(()); }
     let total_items = total_items.unwrap();
     let directory_size = total_items + size_of::<FatDirectoryItem>() as u16;
-    let item = fat16_read_internal(disk, cluster, 0x00, directory_size);
+    let item = fat16_read_internal(disk, cluster, 0x00, directory_size as u32);
     if item.is_err() { return Err(()); }
     let item = item.unwrap();
-    let item = to_fat_directory_items(unsafe { item.align_to::<u8>().1 }, total_items);
+    let item = to_fat_directory_items(unsafe { item.align_to::<u8>().1 }, total_items as u32);
     let directory = FatDirectory {
         items: item,
         total: total_items as u32,
@@ -442,7 +377,7 @@ fn fat16_cluster_to_sector(fat_private: &FatPrivate, cluster: u16) -> Result<u32
     Ok(root_directory.end_sector_pos + (cluster as u32 - 2) * header.sectors_per_cluster as u32)
 }
 
-fn fat16_read_internal(disk: &Disk, starting_cluster: u16, offset: u16, total: u16) -> Result<Vec<u16>, ()> {
+fn fat16_read_internal(disk: &Disk, starting_cluster: u16, offset: u32, total: u32) -> Result<Vec<u16>, ()> {
     let fat_private = disk.fat_private.clone();
     if fat_private.is_none() { return Err(()); }
     let fat_private = fat_private.unwrap();
@@ -452,21 +387,26 @@ fn fat16_read_internal(disk: &Disk, starting_cluster: u16, offset: u16, total: u
     Ok(res.unwrap())
 }
 
-fn fat16_read_internal_from_stream(disk: &Disk, stream: &DiskStreamer, cluster: u16, offset: u16, mut total: u16) -> Result<Vec<u16>, ()> {
+fn fat16_read_internal_from_stream(disk: &Disk, stream: &DiskStreamer, cluster: u16, offset: u32, mut total: u32) -> Result<Vec<u16>, ()> {
     let fat_private = disk.fat_private.clone();
     if fat_private.is_none() { return Err(()); }
     let fat_private = fat_private.unwrap();
-    let size_of_cluster_bytes = fat_private.header.primary_header.sectors_per_cluster as u16 * fat_private.header.primary_header.bytes_per_sector;
+    let size_of_cluster_bytes = fat_private.header.primary_header.sectors_per_cluster as u32 * disk.sector_size;
     let cluster_to_use = fat16_get_cluster_for_offset(disk, cluster, offset);
+    println!("cluster_to_use: {:?}", cluster_to_use);
+    println!("cluster size: {:?}", size_of_cluster_bytes);
     if cluster_to_use.is_err() { return Err(()); }
     let cluster_to_use = cluster_to_use.unwrap();
-    let offset_from_cluster = offset % size_of_cluster_bytes;
-    let starting_sector = fat16_cluster_to_sector(&fat_private, cluster_to_use);
-    if starting_sector.is_err() { return Err(()); }
-    let starting_sector = starting_sector.unwrap();
+    let offset_from_cluster = offset as u32 % size_of_cluster_bytes;
+    let starting_cluster = fat16_cluster_to_sector(&fat_private, cluster_to_use);
+    if starting_cluster.is_err() { return Err(()); }
+    let starting_sector = starting_cluster.unwrap();
+    let offset_from_cluster = if offset_from_cluster == 0 { 1 } else { offset_from_cluster };
     let starting_pos = (starting_sector * disk.sector_size as u32) * offset_from_cluster as u32;
-    let total_to_read = if total > size_of_cluster_bytes { size_of_cluster_bytes } else { total };
+    println!("offset from cluster: {:?}", offset_from_cluster);
+    let total_to_read = if total as u32 > size_of_cluster_bytes { size_of_cluster_bytes } else { total as u32 };
     let mut stream = stream.clone();
+    println!("starting_pos: {:?}", starting_pos);
     stream.seek(starting_pos);
     let res = stream.read(total_to_read);
     if res.is_none() { return Err(()); }
@@ -481,11 +421,11 @@ fn fat16_read_internal_from_stream(disk: &Disk, stream: &DiskStreamer, cluster: 
     Ok(res)
 }
 
-fn fat16_get_cluster_for_offset(disk: &Disk, cluster: u16, offset: u16) -> Result<u16, ()> {
+fn fat16_get_cluster_for_offset(disk: &Disk, cluster: u16, offset: u32) -> Result<u16, ()> {
     let fat_private = disk.fat_private.clone();
     if fat_private.is_none() { return Err(()); }
     let fat_private = fat_private.unwrap();
-    let size_of_cluster_bytes = fat_private.header.primary_header.sectors_per_cluster as u16 * disk.sector_size;
+    let size_of_cluster_bytes = fat_private.header.primary_header.sectors_per_cluster as u32 * disk.sector_size;
     let mut cluster_to_use = cluster;
     let cluster_ahead = offset / size_of_cluster_bytes;
     for _ in 0..cluster_ahead {
@@ -501,18 +441,43 @@ fn fat16_get_cluster_for_offset(disk: &Disk, cluster: u16, offset: u16) -> Resul
     Ok(cluster_to_use)
 }
 
-fn fat16_get_fat_entry(disk: &Disk, cluster_to_use: u16) -> Result<u16, ()> {
+fn fat16_get_fat_entry(disk: &Disk, cluster: u16) -> Result<u16, ()> {
     let fat_private = disk.fat_private.clone();
     if fat_private.is_none() { return Err(()); }
     let fat_private = fat_private.unwrap();
     let mut stream = fat_private.clone().fat_read_stream;
-    let fat_table_position = fat16_get_first_fat_sector(&fat_private) * disk.sector_size;
-    stream.seek((fat_table_position * (cluster_to_use * FAT_16_FAT_ENTRY_SIZE as u16)) as u32);
-    let res = stream.read(16);
+    let fat_table_position = fat16_get_first_fat_sector(&fat_private) as u32 * disk.sector_size;
+    stream.seek(fat_table_position * (cluster as u32 * FAT_16_FAT_ENTRY_SIZE as u32));
+    let res = stream.read(size_of::<u16>() as u32);
     if res.is_none() { return Err(()); }
     Ok(*(res.unwrap().get(0).unwrap()))
 }
 
 fn fat16_get_first_fat_sector(fat_private: &FatPrivate) -> u16 {
     fat_private.header.primary_header.reserved_sectors
+}
+pub fn fat16_read(disk: &Disk, descriptor: &Vec<u8>, size: u16, nmemb: u16) -> Result<Vec<u8>, ()> {
+    let descriptor = to_fat_descriptor(descriptor.clone());
+    let item = descriptor.item.item;
+    println!("item: {:?}", item);
+    if item.is_none() { return Err(()); }
+    let item = item.unwrap();
+    let mut offset = descriptor.position;
+    let mut res = Vec::new();
+    for i in 0..nmemb {
+        let read = fat16_read_internal(&disk, fat16_get_first_cluster(&item), offset as u32, size as u32);
+        println!("get first cluster : {:?}", fat16_get_first_cluster(&item));
+        if read.is_err() { return Err(()); }
+        let read = read.unwrap();
+        let mut read = unsafe { read.align_to::<u8>().1 }.to_vec();
+        res.append(&mut read);
+        offset += size;
+    }
+    Ok(res)
+}
+
+fn to_fat_descriptor(descriptor: Vec<u8>) -> FatFileDescriptor {
+    let descriptor = descriptor.as_slice();
+    let (_head, body, _tail) = unsafe { descriptor.align_to::<FatFileDescriptor>() };
+    body[0].clone()
 }
