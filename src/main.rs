@@ -42,7 +42,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let mut fd = fopen("1:/test.txt".to_string(), "r".to_string()).unwrap();
     println!("Fopen text : {:x?}", fd.private.clone().iter().map(|x| x.clone() as char).collect::<String>());
     fseek(&mut fd, 2, SEEK_SET);
-    let read = fread(fd.private, 5, 1, fd.index);
+    let read = fread(&fd, 5, 1);
     let read = read.unwrap();
     println!("Fread test.txt : {:x?}", read.iter().map(|x| x.clone() as char).collect::<String>());
     

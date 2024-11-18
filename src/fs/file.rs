@@ -132,13 +132,8 @@ pub fn fopen(filename: String, mode: String) -> Result<FileDescriptor, FOpenErro
     }
 }
 
-pub fn fread(private: Vec<u8>, size: u16, nmemb: u16, fd: u16) -> Result<Vec<u8>, ()> {
-    if size == 0 || nmemb == 0 { return Err(()) }
-    let file_descriptors = FILE_DESCRIPTORS.lock();
-    let desc = file_descriptors.get(fd as usize);
-    if desc.clone().is_none() { return Err(()) }
-    let desc = desc.unwrap();
-    let res = (desc.filesystem.read)(&desc.disk, &private, size, nmemb);
+pub fn fread(file_descriptor: &FileDescriptor, size: u16, nmemb: u16) -> Result<Vec<u8>, ()> {
+    let res = (file_descriptor.filesystem.read)(&file_descriptor.disk, &file_descriptor.private, size, nmemb);
     if res.is_err() { return Err(()) }
     Ok(res.unwrap())
 }
