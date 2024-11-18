@@ -29,12 +29,14 @@ pub struct File {
 type FsOpen = fn(&Disk, &PathPart, &FileMode) -> Result<Vec<u8>, ()>;
 type FsResolve = fn(Disk) -> Result<Box<FatPrivate>, ResolveError>;
 type FsRead = fn(&Disk, &Vec<u8>, u16, u16) -> Result<Vec<u8>, ()>;
+type FsSeek = fn(&Vec<u8>, u16, FileSeekMode) -> Result<Vec<u8>, ()>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FileSystem {
     pub resolve: FsResolve,
     pub open: FsOpen,
     pub read: FsRead,
+    pub seek: FsSeek,
     
     pub name: [char; 20],
 }
@@ -149,3 +151,11 @@ fn get_file_mode_from_string(mode: String) -> FileMode {
         _ => FileMode::INVALID,
     }
 }
+
+pub fn fseek(file_descriptor: &mut FileDescriptor, offset: u16, whence: FileSeekMode) -> Result<(), ()> {
+    let res = (file_descriptor.filesystem.seek)(&file_descriptor.private, offset, whence);
+    if res.is_err() { return Err(()) }
+    let res = res.unwrap();
+    file_descriptor.private = res;
+    Ok(())
+} 

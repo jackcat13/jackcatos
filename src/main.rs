@@ -10,7 +10,7 @@ use alloc::string::{String, ToString};
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use jackcatos::{
-    allocator, disk::{self}, fs::file::{fopen, fread}, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
+    allocator, disk::{self}, fs::file::{fopen, fread, fseek, FileSeekMode::SEEK_SET}, hlt_loop, memory::{self, BootInfoFrameAllocator}, println, task::{executor::Executor, keyboard, Task}
 };
 use x86_64::VirtAddr;
 
@@ -39,9 +39,10 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let extended_header = header.extended_header;
     let volume_id_string = extended_header.volume_id_string;
     // println!("volume label : {:x?}", volume_id_string);
-    let fd = fopen("1:/test.txt".to_string(), "r".to_string()).unwrap();
+    let mut fd = fopen("1:/test.txt".to_string(), "r".to_string()).unwrap();
     println!("Fopen text : {:x?}", fd.private.clone().iter().map(|x| x.clone() as char).collect::<String>());
-    let read = fread(fd.private, 13, 1, fd.index);
+    fseek(&mut fd, 2, SEEK_SET);
+    let read = fread(fd.private, 5, 1, fd.index);
     let read = read.unwrap();
     println!("Fread test.txt : {:x?}", read.iter().map(|x| x.clone() as char).collect::<String>());
     

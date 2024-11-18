@@ -1,9 +1,7 @@
 
-use core::{any::Any, ffi::c_void, fmt::Pointer};
+use alloc::{boxed::Box, string::String, vec::Vec}; 
 
-use alloc::{boxed::Box, string::String, vec::{self, Vec}}; 
-
-use crate::{disk::{disk::Disk, streamer::DiskStreamer}, fs::{file::{FileDescriptor, FileMode, FileSystem}, path_parser::{PathPart, PATH_MAX_SIZE}}, print, println};
+use crate::{disk::{disk::Disk, streamer::DiskStreamer}, fs::{file::{FileMode, FileSeekMode, FileSystem}, path_parser::PathPart}, println};
 
 pub const FAT_16_SIGNATURE: u8 = 0x29;
 pub const FAT_16_FAT_ENTRY_SIZE: u8 = 0x02;
@@ -121,6 +119,7 @@ pub fn fat16_init() -> FileSystem {
         resolve: fat16_resolve,
         open: fat16_open,
         read: fat16_read,
+        seek: fat16_seek,
         
         name: ['f', 'a', 't', '1', '6', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
     }
@@ -393,6 +392,7 @@ fn fat16_read_internal_from_stream(disk: &Disk, stream: &DiskStreamer, cluster: 
     let fat_private = fat_private.unwrap();
     let size_of_cluster_bytes = fat_private.header.primary_header.sectors_per_cluster as u32 * disk.sector_size;
     let cluster_to_use = fat16_get_cluster_for_offset(disk, cluster, offset);
+    println!("offset: {:?}", offset);
     println!("cluster_to_use: {:?}", cluster_to_use);
     println!("cluster size: {:?}", size_of_cluster_bytes);
     if cluster_to_use.is_err() { return Err(()); }
@@ -401,8 +401,7 @@ fn fat16_read_internal_from_stream(disk: &Disk, stream: &DiskStreamer, cluster: 
     let starting_cluster = fat16_cluster_to_sector(&fat_private, cluster_to_use);
     if starting_cluster.is_err() { return Err(()); }
     let starting_sector = starting_cluster.unwrap();
-    let offset_from_cluster = if offset_from_cluster == 0 { 1 } else { offset_from_cluster };
-    let starting_pos = (starting_sector * disk.sector_size as u32) * offset_from_cluster as u32;
+    let starting_pos = (starting_sector * disk.sector_size as u32) + offset_from_cluster as u32;
     println!("offset from cluster: {:?}", offset_from_cluster);
     let total_to_read = if total as u32 > size_of_cluster_bytes { size_of_cluster_bytes } else { total as u32 };
     let mut stream = stream.clone();
@@ -458,6 +457,7 @@ fn fat16_get_first_fat_sector(fat_private: &FatPrivate) -> u16 {
 }
 pub fn fat16_read(disk: &Disk, descriptor: &Vec<u8>, size: u16, nmemb: u16) -> Result<Vec<u8>, ()> {
     let descriptor = to_fat_descriptor(descriptor.clone());
+    println!("descriptor position: {:?}", descriptor.position);
     let item = descriptor.item.item;
     println!("item: {:?}", item);
     if item.is_none() { return Err(()); }
@@ -480,4 +480,24 @@ fn to_fat_descriptor(descriptor: Vec<u8>) -> FatFileDescriptor {
     let descriptor = descriptor.as_slice();
     let (_head, body, _tail) = unsafe { descriptor.align_to::<FatFileDescriptor>() };
     body[0].clone()
+}
+
+pub fn fat16_seek(descriptor: &Vec<u8>, offset: u16, seek_mode: FileSeekMode) -> Result<Vec<u8>, ()> {
+    let mut descriptor_fat = to_fat_descriptor(descriptor.clone());
+    let item = descriptor_fat.clone().item;
+    if !matches!(item.item_type, FatItemType::File) { return Err(()); }
+    let item = item.item;
+    if item.is_none() { return Err(()); }
+    match seek_mode {
+        FileSeekMode::SEEK_SET => {
+            descriptor_fat.position = offset;
+        },
+        FileSeekMode::SEEK_END => {
+            ()
+        },
+        FileSeekMode::SEEK_CUR => {
+            descriptor_fat.position += offset;
+        }
+    }
+    Ok(unsafe { any_as_u8_slice(&descriptor_fat.clone()) })
 }
