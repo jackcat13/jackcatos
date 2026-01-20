@@ -1,7 +1,6 @@
-; Function that prints any string present in si register
-; Usage :
-; mov si, msg_variable
-; call print_string
+; Prints any string present in si register
+; Params:
+; si = Address of the null-terminated string
 print_string:
     lodsb
     cmp al, 0

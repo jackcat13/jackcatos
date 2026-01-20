@@ -10,12 +10,16 @@ _start:
     mov ds, ax
     mov es, ax
 
+    ; Setup stack
+    mov ss, ax
+    mov sp, 0x7C00
+
     mov si, msg
     call print_string
 
     ; load kernel from disk
     mov bx, 0x1000 ; Memory address where to load data
-    mov dh, 1 ; Number of sectors
+    mov dh, 15 ; Number of sectors
     mov dl, [boot_drive] ; Drive number
     call disk_load
 
