@@ -1,0 +1,1 @@
+nasm -f bin boot/boot.asm -o boot.bin && nasm -f bin boot/kernel_entry.asm -o kernel_entry.bin && cat boot.bin kernel_entry.bin > os-image.bin && qemu-system-x86_64 -drive format=raw,file=os-image.bin
