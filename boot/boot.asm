@@ -23,6 +23,9 @@ _start:
     mov si, msg_loaded
     call print_string
 
+    ; jmp to loaded kernel
+    jmp 0x0000:0x1000
+
     ; infinite loop
     jmp _loop
 
