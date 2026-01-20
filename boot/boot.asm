@@ -50,19 +50,7 @@ disk_load:
     call print_string
     ret
 
-print_string:
-    lodsb
-    cmp al, 0
-    je .done
-
-    ; call video interruption to print to screen
-    mov ah, 0x0E
-    mov bh, 0
-    int 0x10
-    jmp print_string
-
-.done:
-    ret
+%include "boot/print.asm"
 
 msg: db "Booting jackcatos!", 0x0D, 0x0A, 0
 msg_loaded: db "Kernel loaded!", 0x0D, 0x0A, 0
