@@ -1,7 +1,10 @@
-bits 16
-org 0x1000
+global _start
+extern kernel_main
 
-kernel_start:
+section .text
+bits 16
+
+_start:
     mov si, msg_kernel_started
     call print_string
 
@@ -43,6 +46,16 @@ init_pm:
 
     call check_long_mode
     call setup_page_tables
+
+    ; Enable SSE (needed by Rust for floating point (xmm registers)
+    mov eax, cr0
+    and ax, 0xFFFB ; Clear EM (Emulation)
+    or ax, 0x2 ; Set MP (Monitor Coprocessor)
+    mov cr0, eax
+    mov eax, cr4
+    or eax, (1 << 9)    ; Set OSFXSR (OS support for FXSAVE/FXRSTOR)
+    or eax, (1 << 10)   ; Set OSXMMEXCPT (OS support for unmasked SIMD exceptions)
+    mov cr4, eax
 
     ; Enable PAE
     mov eax, cr4
@@ -104,6 +117,9 @@ init_lm:
     mov rdx, 0xB8960            ; Address in VGA buffer (0xB8000 + 15 * 160)
     call print_string_lm
 
+    ; Entry point written in Rust
+    call kernel_main
+
     hlt
     jmp $
 
@@ -140,6 +156,3 @@ msg_kernel_started: db "Kernel started in 16-bit mode", 0x0D, 0x0A, 0
 msg_switching_pm: db "Switching to 32-bit protected mode...", 0x0D, 0x0A, 0
 msg_pm_success: db "32-bit Protected Mode Active!", 0
 msg_lm_success: db "64-bit Long Mode Active!", 0
-
-; Pad to fill sector
-times 7680-($-$$) db 0
