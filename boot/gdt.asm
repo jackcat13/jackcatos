@@ -22,6 +22,15 @@ gdt_data:
     db 11001111b    ; Flags (same as code segment)
     db 0x0          ; Base (bits 24-31)
 
+gdt_code_64:
+    ; 64-bit Code segment descriptor
+    dw 0xFFFF       ; Limit (ignored in 64-bit)
+    dw 0x0          ; Base (ignored in 64-bit)
+    db 0x0          ; Base
+    db 10011010b    ; Access: present, ring 0, code, executable, readable
+    db 10101111b    ; Flags: Long Mode (L)=1, 32-bit (D)=0
+    db 0x0          ; Base
+
 gdt_end:
 
 gdt_descriptor:
@@ -31,3 +40,4 @@ gdt_descriptor:
 ; Define constants for segment selectors
 CODE_SEG equ gdt_code - gdt_start    ; 0x08
 DATA_SEG equ gdt_data - gdt_start    ; 0x10
+CODE_SEG_64 equ gdt_code_64 - gdt_start ; 0x18
