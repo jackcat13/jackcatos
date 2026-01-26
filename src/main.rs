@@ -1,29 +1,25 @@
+#![feature(abi_x86_interrupt)]
 #![no_std]
 #![no_main]
 
 use core::panic::PanicInfo;
+use idt::init_idt;
+use crate::color::Color;
+use crate::vbe::{get_vbe};
 
-// This function is called from assembly
+mod color;
+mod idt;
+mod vbe;
+
+const VBE_MODE_INFO_ADDRESS: u16 = 0x5000;
+
 #[unsafe(no_mangle)]
 pub extern "C" fn kernel_main() -> ! {
-    let vga_buffer = 0xb8000 as *mut u8;
+    let vbe_info = get_vbe();
 
-    // Clear screen (set background to Blue)
-    for i in (0..80 * 25 * 2).step_by(2) {
-        unsafe {
-            *vga_buffer.offset(i as isize) = b' ';      // Space
-            *vga_buffer.offset(i as isize + 1) = 0x1F;  // White on Blue
-        }
-    }
+    vbe_info.clear_background(Color{ red: 0x00, green: 0x11, blue: 0x33});
 
-    // Print "Hello from Rust!" at the top
-    let msg = b"Hello from Rust!";
-    for (i, &byte) in msg.iter().enumerate() {
-        unsafe {
-            *vga_buffer.offset(i as isize * 2) = byte;
-            *vga_buffer.offset(i as isize * 2 + 1) = 0x1F;
-        }
-    }
+    init_idt();
 
     loop {}
 }

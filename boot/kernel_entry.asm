@@ -11,6 +11,21 @@ _start:
     mov si, msg_switching_pm
     call print_string
 
+    ; --- VESA VBE GRAPHICS SETUP ---
+    ; 1. Get VBE Mode Info to find the Framebuffer Address
+    mov ax, 0x4F01 ; Function: Get Mode Info
+    mov cx, 0x4118 ; Mode: 1024x768 x 24-bit color (Linear Framebuffer bit set)
+    mov di, 0x5000 ; Target address to store Info Block (0x5000)
+    int 0x10 ; Call BIOS
+
+    cmp ax, 0x004F ; Check for success
+    jne .vbe_error
+
+    ; 2. Set the Mode
+    mov ax, 0x4F02 ; Function: Set VBE Mode
+    mov bx, 0x4118 ; Mode + Linear Framebuffer bit (0x4000)
+    int 0x10
+
     ; Switch to protected mode
     cli ; Disable interrupts
     lgdt [gdt_descriptor] ; Load GDT
@@ -20,6 +35,9 @@ _start:
     mov cr0, eax ; Entering protected mode
 
     jmp CODE_SEG:init_pm ; Far jump to 32-bit code
+
+.vbe_error:
+    jmp $
 
 align 8
 %include "boot/gdt.asm"
