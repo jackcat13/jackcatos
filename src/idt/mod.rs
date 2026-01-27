@@ -1,5 +1,6 @@
 use core::mem::size_of;
 use crate::color::Color;
+use crate::{io, pic};
 use crate::vbe::get_vbe;
 
 #[derive(Debug)]
@@ -71,19 +72,42 @@ pub fn init_idt() {
         };
 
         core::arch::asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags));
+
+        // Index 33 = PIC Offset (32) + IRQ 1 (Keyboard)
+        IDT[33].set_handler(keyboard_handler as *const () as u64);
+
+        let ptr = IdtPtr {
+            limit: (size_of::<[IdtEntry; 256]>() - 1) as u16,
+            base: core::ptr::addr_of!(IDT) as u64,
+        };
+
+        core::arch::asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags));
+
     }
 }
 
-// The Breakpoint Exception Handler
-// We use the special calling convention "x86-interrupt"
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    // Since we are in graphics mode, we can't easily print text unless we pass the
-    // VbeInfo around. For now, let's just modify the screen directly to prove it works.
-
-    // Read VBE info from 0x5000 (just like in main)
-    // In a real OS, you'd have a static global Writer
     let vbe_info = get_vbe();
-
-    // Draw a White square at (150, 150) to signal "Interrupt Handled!"
     vbe_info.draw_square(200, 200, 100, Color{red: 0xFF, green: 0xFF, blue: 0xFF});
+}
+
+extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        // 1. Read the scancode from the keyboard data port
+        let scancode = io::inb(0x60);
+
+        // 2. Visual feedback
+        let vbe = get_vbe();
+        // If the top bit is 0, it's a Key Press. If 1, it's a Release.
+        if scancode < 128 {
+            // Key Down -> Green Square
+            vbe.draw_square(100, 100, 50, Color { red: 0, green: 255, blue: 0 });
+        } else {
+            // Key Up -> Red Square
+            vbe.draw_square(100, 100, 50, Color { red: 255, green: 0, blue: 0 });
+        }
+
+        // 3. Acknowledge the interrupt
+        pic::notify_eoi(33);
+    }
 }

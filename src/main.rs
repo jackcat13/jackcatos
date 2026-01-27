@@ -5,10 +5,13 @@
 use core::panic::PanicInfo;
 use idt::init_idt;
 use crate::color::Color;
+use crate::pic::init_pic;
 use crate::vbe::{get_vbe};
 
 mod color;
 mod idt;
+mod io;
+mod pic;
 mod vbe;
 
 const VBE_MODE_INFO_ADDRESS: u16 = 0x5000;
@@ -20,8 +23,13 @@ pub extern "C" fn kernel_main() -> ! {
     vbe_info.clear_background(Color{ red: 0x00, green: 0x11, blue: 0x33});
 
     init_idt();
+    init_pic();
 
-    loop {}
+    unsafe { core::arch::asm!("sti"); } // enable CPU Interrupts
+
+    loop {
+        unsafe { core::arch::asm!("hlt"); }
+    }
 }
 
 #[panic_handler]
