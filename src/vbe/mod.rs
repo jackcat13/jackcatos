@@ -38,44 +38,45 @@ pub struct VbeModeInfo {
 
 impl VbeModeInfo {
     pub fn clear_background(&self, color: Color) {
-        let framebuffer = self.framebuffer as *mut u8;
         let width = self.width as isize;
         let height = self.height as isize;
-        let pitch = self.pitch as isize;
-        let bpp = self.bpp as isize;
-        let bytes_per_pixel = bpp / 8;
-
         for y in 0..height {
             for x in 0..width {
-                let offset = y * pitch + x * bytes_per_pixel;
-                unsafe {
-                    *framebuffer.offset(offset) = color.blue;
-                    *framebuffer.offset(offset + 1) = color.green;
-                    *framebuffer.offset(offset + 2) = color.red;
-                }
+                self.draw_pixel(x, y, color);
             }
         }
     }
-    
-    /// Draw a square with center at (x, y) with size square_size
+
+    /// Draw a square at (x, y) with size square_size
     pub fn draw_square(&self, x: isize, y: isize, square_size: isize, color: Color){
+        for y in y..(y + square_size) {
+            for x in x..(x + square_size) {
+                self.draw_pixel(x, y, color);
+            }
+        }
+    }
+
+    pub fn draw_pixel(&self, x: isize, y: isize, color: Color) {
         let framebuffer = self.framebuffer as *mut u8;
         let pitch = self.pitch as isize;
         let bpp = self.bpp as isize;
         let bytes_per_pixel = bpp / 8;
-        
-        let start_x = (x - square_size) / 2;
-        let start_y = (y - square_size) / 2;
+        let offset = y * pitch + x * bytes_per_pixel;
+        unsafe {
+            *framebuffer.offset(offset) = color.blue;
+            *framebuffer.offset(offset + 1) = color.green;
+            *framebuffer.offset(offset + 2) = color.red;
+        }
+    }
 
-        for y in start_y..(start_y + square_size) {
-            for x in start_x..(start_x + square_size) {
-                let offset = y * pitch + x * bytes_per_pixel;
-                unsafe {
-                    *framebuffer.offset(offset) = color.blue;
-                    *framebuffer.offset(offset + 1) = color.green;
-                    *framebuffer.offset(offset + 2) = color.red;
-                }
+    pub fn draw_text(&self, x: isize, y: isize, text: &str, color: Color) {
+        let mut x_offset = x;
+        for char in text.chars() {
+            match char {
+                'w' | 'W' => self.draw_pixel(x_offset, y, color),
+                _ => { self.draw_square(x_offset, y, 16, color) }
             }
+            x_offset += 40;
         }
     }
 }

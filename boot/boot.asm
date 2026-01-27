@@ -17,42 +17,66 @@ _start:
     mov si, msg
     call print_string
 
-    ; load kernel from disk
-    mov bx, 0x1000 ; Memory address where to load data
-    mov dh, 15 ; Number of sectors
-    mov dl, [boot_drive] ; Drive number
-    call disk_load
+    ; Load kernel using LBA
+    mov word [dap_segment], 0x0000    ; Load at 0x1000:0x0000
+    mov word [dap_offset], 0x8000
+    mov word [dap_sectors], 100       ; Load 100 sectors (50KB)
+    mov dword [dap_lba_low], 1        ; Start from LBA 1 (sector after bootloader)
+    mov dword [dap_lba_high], 0
+
+    call disk_load_lba
 
     ; Print sucess message
     mov si, msg_loaded
     call print_string
 
     ; jmp to loaded kernel
-    jmp 0x0000:0x1000
+    jmp 0x0000:0x8000
 
     ; infinite loop
     jmp _loop
 
-disk_load:
-    push dx ; Save number of sectors to read
+; ===============================================
+; Load sectors using LBA
+; Uses the Disk Address Packet (DAP) structure
+; Input: DAP structure must be filled
+; ===============================================
+disk_load_lba:
+    pusha
 
-    mov ah, 0x02 ; read sector function
-    mov al, dh ; number of sectors to read
-    mov ch, 0 ; cylinder / track number
-    mov cl, 2 ; sector 2 since sector 1 is bootloader
-    mov dh, 0 ; head number
-    int 0x13 ;
+    mov ah, 0x42 ; Extended Read Function
+    mov dl, [boot_drive]
+    mov si, disk_address_packet
+    int 0x13
+
     jc .disk_error
 
-    pop dx ; restore dx
-    cmp al, dh ; Check if we read correct number of sectors
-    jne .disk_error
+    ;restore DS
+    xor ax, ax
+    mov ds, ax
+
+    popa
     ret
 
 .disk_error:
     mov si, msg_disk_error
     call print_string
     ret
+
+align 4
+disk_address_packet:
+    db 0x10             ; Size of DAP (16 bytes)
+    db 0                ; Always 0
+dap_sectors:
+    dw 0                ; Number of sectors to read
+dap_offset:
+    dw 0                ; Memory offset
+dap_segment:
+    dw 0                ; Memory segment
+dap_lba_low:
+    dd 0                ; Lower 32 bits of LBA
+dap_lba_high:
+    dd 0                ; Upper 32 bits of LBA
 
 %include "boot/print.asm"
 

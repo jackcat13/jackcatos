@@ -27,6 +27,12 @@ pub extern "C" fn kernel_main() -> ! {
 
     unsafe { core::arch::asm!("sti"); } // enable CPU Interrupts
 
+    vbe_info.draw_text(100, 100, "Wel", Color{
+        red: 255,
+        green: 255,
+        blue: 255,
+    });
+
     loop {
         unsafe { core::arch::asm!("hlt"); }
     }
