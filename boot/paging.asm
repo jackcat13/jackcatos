@@ -1,17 +1,18 @@
 setup_page_tables:
-    ; We'll use 0x10000 for page tables (well above our kernel at 0x1000)
-    mov edi, 0x10000
+    ; We'll use 0x12000 for page tables (well above our kernel at 0x1000)
+    mov edi, 0x12000
     mov cr3, edi
 
     xor eax, eax
     mov ecx, 6144
     rep stosd
 
-    mov edi, cr3
+    mov eax, cr3
+    mov edi, eax
 
     ; --- Level 4 (PML4) ---
     ; Map first entry to PDPT
-    mov dword [edi], 0x11003      ; Point to PDPT at 0x11000 | Present | Writable
+    mov dword [edi], 0x13003      ; Point to PDPT at 0x13000 | Present | Writable
 
     ; --- Level 3 (PDPT) ---
     ; We need to map 4 entries (4GB total) to cover typical VBE Framebuffer locations
@@ -20,7 +21,7 @@ setup_page_tables:
     ; PDPT[2] -> PD2 (2-3GB)
     ; PDPT[3] -> PD3 (3-4GB)
 
-    mov eax, 0x12003 ; First PD at 0x12000
+    mov eax, 0x14003 ; First PD at 0x14000
     mov dword [edi + 0x1000], eax
 
     add eax, 0x1000
@@ -36,7 +37,7 @@ setup_page_tables:
     ; We need to fill 4 Page Directories (2048 entries total)
     ; Each entry maps 2MB. 2048 * 2MB = 4GB.
 
-    mov edi, 0x12000 ; Start of first PD
+    mov edi, 0x14000 ; Start of first PD
     mov eax, 0x83 ; Start at physical address 0 | Huge | Present | Writable
     mov ecx, 2048 ; 512 entries * 4 directories
 

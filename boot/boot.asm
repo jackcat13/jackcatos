@@ -18,10 +18,10 @@ _start:
     call print_string
 
     ; Load kernel using LBA
-    mov word [dap_segment], 0x0000    ; Load at 0x1000:0x0000
+    mov word [dap_segment], 0x0000
     mov word [dap_offset], 0x8000
-    mov word [dap_sectors], 100       ; Load 100 sectors (50KB)
-    mov dword [dap_lba_low], 1        ; Start from LBA 1 (sector after bootloader)
+    mov word [dap_sectors], 100 ; Load 100 sectors (50KB)
+    mov dword [dap_lba_low], 1 ; Start from LBA 1 (sector after bootloader)
     mov dword [dap_lba_high], 0
 
     call disk_load_lba

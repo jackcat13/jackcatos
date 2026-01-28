@@ -1,5 +1,8 @@
 global _start
 extern kernel_main
+extern _bss_start
+extern _bss_end
+extern _bss_size
 
 section .text
 bits 16
@@ -52,10 +55,6 @@ init_pm:
     mov es, ax
     mov fs, ax
     mov gs, ax
-
-    ; Set ip stack
-    mov ebp, 0x90000
-    mov esp, ebp
 
     ; Print success message on the 5th line to avoid overwriting BIOS messages
     mov ebx, msg_pm_success     ; Point EBX to the string
@@ -123,17 +122,20 @@ print_string_pm:
 bits 64
 init_lm:
     mov ax, DATA_SEG
-    mov ds, ax
-    mov es, ax
     mov fs, ax
     mov gs, ax
-    mov ss, ax
 
-    ; Print "64-bit Long Mode Active!"
-    ; We'll print it on line 15 (offset 0xB8960) to avoid overwriting previous messages
-    mov rbx, msg_lm_success     ; Address of string
-    mov rdx, 0xB8960            ; Address in VGA buffer (0xB8000 + 15 * 160)
-    call print_string_lm
+    ; stack
+    mov rsp, 0x7FF0
+    and rsp, -16
+    xor rbp, rbp
+
+    ; zero bss
+    mov rdi, _bss_start
+    mov rcx, _bss_size
+    shr rcx, 3              ; bytes → qwords
+    xor rax, rax
+    rep stosq
 
     ; Entry point written in Rust
     call kernel_main
