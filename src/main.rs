@@ -27,7 +27,7 @@ pub extern "C" fn kernel_main() -> ! {
 
     unsafe { core::arch::asm!("sti"); } // enable CPU Interrupts
 
-    vbe_info.draw_text(100, 100, "Welcome to JackcatOS !", Color{
+    vbe_info.draw_text(100, 100, "Welcome to JackcatOS", Color{
         red: 255,
         green: 255,
         blue: 255,
